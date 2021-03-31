@@ -819,7 +819,7 @@ export default function draw() {
     ctx.moveTo(461,842)
     ctx.quadraticCurveTo(452,840,451,828)
     ctx.quadraticCurveTo(464,831,461,842)
-    ctx.lineTo()
+    ctx.lineTo(461,842)
     ctx.fill()
     ctx.stroke()
 
