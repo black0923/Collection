@@ -11,7 +11,7 @@
       @mousedown.stop="dragMousedown($event, scale)"
       :style="{
         width: 1920,
-        height: maxHeight * darg_box_width_unit  * scale + 'px',
+        height: maxHeight * darg_box_width_unit * scale + 'px',
         transform: `scale(${scale})`,
       }"
     >
@@ -31,7 +31,8 @@
             : '',
           zIndex: getZIndex(item),
           backgroundColor:
-            ((operate === 'merge' || operate === 'merge-move')&&mergeList.findIndex((v) => v.id === item.id) > -1)
+            (operate === 'merge' || operate === 'merge-move') &&
+            mergeList.findIndex((v) => v.id === item.id) > -1
               ? '#87ceeb88'
               : isStatic
               ? '#0000'
@@ -69,7 +70,9 @@
       </div>
       <div
         class="merge-box"
-        v-if="operate === 'merge' || operate === 'merge-move'"
+        v-if="
+          operate === 'merge' && mergeInfo.start_x&&!isStatic
+        "
         @mousedown.stop="mergeMousedown"
         :style="{
           width:
@@ -114,7 +117,7 @@ export default {
     },
     pageRatio: {
       type: Number,
-      default: 0.5,
+      default: 0,
     },
   },
   watch: {
@@ -137,9 +140,9 @@ export default {
     },
     pageRatio(val) {
       this.getMaxHeight();
-      if (this.maxHeight < (1920 * val) / this.darg_box_width_unit) {
-        this.maxHeight = (1920 * val) / this.darg_box_width_unit;
-      }
+      // if (this.maxHeight < (1920 * val) / this.darg_box_width_unit) {
+      //   this.maxHeight = (1920 * val) / this.darg_box_width_unit;
+      // }
     },
     mergeInfo: {
       handler(val) {
@@ -185,7 +188,7 @@ export default {
         minX: Infinity,
         minY: Infinity,
         maxX: 0,
-        maxY: 0
+        maxY: 0,
       },
       toMerge: false, // 开启组合item
       operate: "move", // 移动move，缩放zoom，合并移动merge merge-move
@@ -201,6 +204,9 @@ export default {
         this.mouseDownInfo = null;
         this.mergeOverInfo = JSON.parse(JSON.stringify(this.mergeInfo));
         this.toMerge = false;
+        if(this.operate==='merge'){
+          this.operate='merge-move'
+        }
         // this.selectItem={}
       };
       // document.onmouseout = () => {
@@ -245,7 +251,7 @@ export default {
       );
     },
     getZIndex(item) {
-      if (this.selectItem && this.selectItem.id === item.id) {
+      if (this.selectItem && this.selectItem.id === item.id&&!this.isStatic) {
         return 1000;
       }
       if (item.optionJson && item.optionJson.extJson) {
@@ -262,7 +268,6 @@ export default {
     addElement({ optionJson, elemType, id }) {
       let scrollTop =
         document.getElementsByClassName("currentPage")[0].scrollTop;
-      console.log(scrollTop);
       let newY = 0 + scrollTop / this.darg_box_width_unit;
       this.layout.push({
         x: 30,
@@ -286,6 +291,10 @@ export default {
         }).then(() => {
           this.$message.success("已删除");
           this.layout.splice(index, 1);
+          let index2 = this.mergeList.findIndex((v) => v.id === item.id);
+          if (index2 > -1) {
+            this.mergeList.splice(index2, 1);
+          }
           if (index === this.currentIndex) {
             this.currentIndex = -1;
             this.$store.commit("SET_currentElement", null);
@@ -295,16 +304,16 @@ export default {
     },
     // 更新新的配置
     setNewOption({ optionJson, elemType, id }) {
-      console.log(this.layout[this.currentIndex]);
+      // console.log(this.layout[this.currentIndex]);
       if (this.layout[this.currentIndex]) {
         this.layout[this.currentIndex].optionJson = optionJson;
         this.layout[this.currentIndex].elemType = elemType;
-        console.log(
-          this.layout[this.currentIndex],
-          "该元素改变了配置",
-          this.layout,
-          this.currentIndex
-        );
+        // console.log(
+        //   this.layout[this.currentIndex],
+        //   "该元素改变了配置",
+        //   this.layout,
+        //   this.currentIndex
+        // );
         this.currentIndex = -1;
         this.$store.commit("SET_currentElement", null);
         // this.$emit('changeElementOption',{optionJson,elemType,elementIndex:this.currentIndex,moduleId:this.moduleId})
@@ -402,11 +411,11 @@ export default {
               this.scale /
               this.darg_box_width_unit +
             this.mergeInfo.start_y;
-          if (new_end_X < 1) {
-            new_end_X = 1;
+          if (new_end_X < 0) {
+            new_end_X = 0;
           }
-          if (new_end_Y < 1) {
-            new_end_Y = 1;
+          if (new_end_Y < 0) {
+            new_end_Y = 0;
           }
           if (new_end_X > 100) {
             new_end_X = 100;
@@ -458,7 +467,7 @@ export default {
         // content.style.transform = "scale(" + box.offsetWidth / 1920 + ")";
         this.scale = box.offsetWidth / 1920;
         var erd = elementResizeDetectorMaker();
-        erd.listenTo(content, () => {
+        erd.listenTo(box, () => {
           window.clearTimeout(this.timeId);
           this.timeId = setTimeout(() => {
             // content.style.transform = "scale(" + box.offsetWidth / 1920 + ")";
@@ -483,7 +492,8 @@ export default {
       this.selectItem = {};
       this.mergeList = [];
       this.operate = "";
-      if (event.button === 2) {
+      this.mergeInfo.start_x = 0;
+      if (event.button === 0) {
         let unit = event.target.clientWidth / 100;
         this.mergeInfo.start_x = (event.offsetX / unit) * scale;
         this.mergeInfo.start_y = (event.offsetY / unit) * scale;
@@ -499,9 +509,12 @@ export default {
     mousedown(event, item) {
       if (event.button === 0) {
         event.stopPropagation(); // 阻止冒泡
-        if((this.operate === 'merge' || this.operate === 'merge-move')&&this.mergeList.findIndex((v) => v.id === item.id) > -1){
-          this.mergeMousedown(event)
-          return
+        if (
+          (this.operate === "merge" || this.operate === "merge-move") &&
+          this.mergeList.findIndex((v) => v.id === item.id) > -1
+        ) {
+          this.mergeMousedown(event);
+          return;
         }
         this.mouseDown = true;
         this.operate = "move";
@@ -527,14 +540,14 @@ export default {
           if (item.x < this.mergeMinMax.minX) {
             this.mergeMinMax.minX = item.x;
           }
-          if ((item.x+item.w) > this.mergeMinMax.maxX) {
-            this.mergeMinMax.maxX = item.x+item.w;
+          if (item.x + item.w > this.mergeMinMax.maxX) {
+            this.mergeMinMax.maxX = item.x + item.w;
           }
           if (item.y < this.mergeMinMax.minY) {
             this.mergeMinMax.minY = item.y;
           }
-          if (item.y+item.h > this.mergeMinMax.maxY) {
-            this.mergeMinMax.maxY = item.y+item.h;
+          if (item.y + item.h > this.mergeMinMax.maxY) {
+            this.mergeMinMax.maxY = item.y + item.h;
           }
         }
         console.log(this.mergeMinMax);
@@ -598,8 +611,8 @@ export default {
       position: absolute;
       right: 0;
       bottom: 0;
-      width: 6px;
-      height: 6px;
+      width: 10px;
+      height: 10px;
       border-right: 2px solid gold;
       border-bottom: 2px solid gold;
       z-index: 2000;
@@ -613,6 +626,8 @@ export default {
     width: 0;
     height: 0;
     z-index: 1001;
+    transition: none;
+    will-change: transform;
   }
 }
 </style>
